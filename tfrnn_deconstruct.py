@@ -50,6 +50,7 @@ class VariableSequenceClassification:
     @lazy_property
     def predict(self):
         # Recurrent network.
+        length_ = self.length
         output, _ = rnn.dynamic_rnn(
             rnn_cell.GRUCell(self._num_hidden),
             data,
@@ -63,13 +64,13 @@ class VariableSequenceClassification:
         bias = tf.Variable(tf.constant(0.1, shape=[out_size]))
         # Softmax layer.
         prediction = tf.nn.softmax(tf.matmul(last, weight) + bias)
-        return prediction
+        return prediction, length_
 
     @lazy_property
     def optimize(self):
         learning_rate = 0.003
         optimizer = tf.train.RMSPropOptimizer(learning_rate)
-        cost = -tf.reduce_sum(self.target * tf.log(self.predict))
+        cost = -tf.reduce_sum(self.target * tf.log(self.predict[0]))
         return optimizer.minimize(cost)
 
     @staticmethod
@@ -99,10 +100,26 @@ if __name__ == '__main__':
             batch = train.sample(10)
             sess.run(model.optimize, {data: batch.data, target: batch.target})
         #y_pred, y_last = sess.run(model.prediction, {data: test.data, target: test.target})
-        y_pred = sess.run(model.predict, {data: test.data, target: test.target})
+        y_pred, length = sess.run(model.predict, {data: test.data, target: test.target})
+        print(length.tolist()[-5:])
         error  = np.mean(np.argmax(y_act, 1) != np.argmax(y_pred, 1))
         print(50*'=')
         print('Epoch {:2d} error {:3.1f}%'.format(epoch + 1, 100 * error))
         print(confusion_matrix(np.argmax(y_act, 1), np.argmax(y_pred, 1)))
 
         print(50*'=')
+        
+
+'''
+    def length(self):
+        used = tf.sign(tf.reduce_max(tf.abs(self.data), reduction_indices=2))
+        length = tf.reduce_sum(used, reduction_indices=1)
+        length = tf.cast(length, tf.int32)
+        return length
+'''
+data = test.data[-5:]
+datalen = length[-5:]
+used = np.sign(np.max(np.abs(data), 2))
+np.sum(used, 1)
+
+

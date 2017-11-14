@@ -2,6 +2,7 @@
 # http://danijar.com/variable-sequence-lengths-in-tensorflow/
 import functools
 import sets
+import numpy as np
 import tensorflow as tf
 # from tensorflow.models.rnn import rnn_cell
 # from tensorflow.models.rnn import rnn
@@ -32,6 +33,7 @@ class VariableSequenceLabelling:
         self.predict
         self.error
         self.optimize
+        #self.model_learn
 
     @lazy_property
     def length(self):
@@ -59,6 +61,26 @@ class VariableSequenceLabelling:
         prediction = tf.nn.softmax(tf.matmul(output, weight) + bias)
         prediction = tf.reshape(prediction, [-1, max_length, num_classes])
         return prediction
+    
+#    @lazy_property
+#    def model_learn(self):
+#        # Recurrent network.
+#        length_ = self.length
+#        output, _ = rnn.dynamic_rnn(
+#            rnn_cell.GRUCell(self._num_hidden),
+#            self.data,
+#            dtype=tf.float32,
+#            sequence_length=length_,
+#        )
+#        # Softmax layer.
+#        max_length = int(self.target.get_shape()[1])
+#        num_classes = int(self.target.get_shape()[2])
+#        weight, bias = self._weight_and_bias(self._num_hidden, num_classes)
+#        # Flatten to apply same weights to all time steps.
+#        output = tf.reshape(output, [-1, self._num_hidden])
+#        prediction = tf.nn.softmax(tf.matmul(output, weight) + bias)
+#        prediction = tf.reshape(prediction, [-1, max_length, num_classes])
+#        return prediction
 
     @lazy_property
     def cost(self):
@@ -80,15 +102,16 @@ class VariableSequenceLabelling:
 
     @lazy_property
     def error(self):
-        mistakes = tf.not_equal(
-            tf.argmax(self.target, 2), tf.argmax(self.predict, 2))
+        y_act  = tf.argmax(self.target, 2)
+        y_pred = tf.argmax(self.predict, 2)
+        mistakes = tf.not_equal(y_act, y_pred)
         mistakes = tf.cast(mistakes, tf.float32)
         mask = tf.sign(tf.reduce_max(tf.abs(self.target), axis=2))
         mistakes *= mask
         # Average over actual sequence lengths.
         mistakes = tf.reduce_sum(mistakes, axis=1)
         mistakes /= tf.cast(self.length, tf.float32)
-        return tf.reduce_mean(mistakes)
+        return tf.reduce_mean(mistakes), y_act, y_pred, mask
 
     @staticmethod
     def _weight_and_bias(in_size, out_size):
@@ -109,6 +132,7 @@ def get_dataset():
 
 if __name__ == '__main__':
     train, test = get_dataset()
+    y_act  = test.target
     _, length, image_size = train.data.shape
     num_classes = train.target.shape[2]
     data = tf.placeholder(tf.float32, [None, length, image_size])
@@ -120,5 +144,15 @@ if __name__ == '__main__':
         for _ in range(100):
             batch = train.sample(10)
             sess.run(model.optimize, {data: batch.data, target: batch.target})
-        error = sess.run(model.error, {data: test.data, target: test.target})
+        error, y_act, y_pred, mask = sess.run(model.error, {data: test.data, target: test.target})
         print('Epoch {:2d} error {:3.1f}%'.format(epoch + 1, 100 * error))
+        
+        # y_pred, y_last = sess.run(model.prediction, {data: test.data, target: test.target})
+        #y_pred = sess.run(model.predict, {data: test.data, target: test.target})
+        #error  = (np.argmax(y_act, 2) != np.argmax(y_pred, 2)).astype(np.float32)
+        #print(50*'=')
+        #print('Epoch {:2d} error {:3.1f}%'.format(epoch + 1, 100 * error))
+        #print(50*'=')
+
+mask
+
